@@ -1,0 +1,4 @@
+python3.10 run_fuzzer.py
+
+
+python3.10 run_fuzzer.py fuzz_tool/corpus/

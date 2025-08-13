@@ -1,0 +1,5 @@
+{
+  "name": "FuzzingTool",
+  "version": ,
+  "features": ["ci", "cd", "fuzzing"
+  "active": true

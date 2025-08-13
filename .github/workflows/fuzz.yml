@@ -1,0 +1,32 @@
+name: Run Python Fuzzing Tool
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        pip install atheris
+
+    - name: Run fuzzing tool
+      run: |
+        source venv/bin/activate
+        python run_fuzzer.py fuzz_tool/corpus/ || true
