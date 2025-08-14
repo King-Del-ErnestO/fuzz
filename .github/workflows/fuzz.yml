@@ -5,28 +5,62 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  schedule:
+    - cron: "30 1 * * *"  # Nightly at 01:30 UTC
 
 jobs:
   fuzz:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install dependencies
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-        pip install --upgrade pip
-        pip install atheris
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
-    - name: Run fuzzing tool
-      run: |
-        source venv/bin/activate
-        python run_fuzzer.py fuzz_tool/corpus/ || true
+      - name: Install dependencies
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run fuzzing (JSON target, 2 minutes)
+        run: |
+          source venv/bin/activate
+          python run_fuzzer.py --target json --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
+
+      - name: Run fuzzing (YAML target, 2 minutes)
+        run: |
+          source venv/bin/activate
+          python run_fuzzer.py --target yaml --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
+
+      - name: Run fuzzing (Markdown target, 2 minutes)
+        run: |
+          source venv/bin/activate
+          python run_fuzzer.py --target markdown --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
+
+      - name: Run fuzzing (Edge-case target, 2 minutes)
+        run: |
+          source venv/bin/activate
+          python run_fuzzer.py --target edge --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
+
+      - name: Upload artifacts (crashes & summary)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzzing-reports-${{ github.run_id }}
+          path: |
+            reports/**

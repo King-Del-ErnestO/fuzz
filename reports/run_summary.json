@@ -1,0 +1,13 @@
+{
+  "artifacts_dir": "reports",
+  "crashes": [
+    "reports/crash_d7cddc7b5b5929481dc199c9c40c44d287e71255"
+  ],
+  "duration_sec": 0.013,
+  "handled_exceptions": 0,
+  "seed": null,
+  "start_time": 1755164454.9677832,
+  "target": "edge",
+  "total_inputs": 4,
+  "unexpected_exceptions": 1
+}

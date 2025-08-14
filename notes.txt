@@ -2,3 +2,15 @@ python3.10 run_fuzzer.py
 
 
 python3.10 run_fuzzer.py fuzz_tool/corpus/
+
+
+python3.10 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Run with seed corpus for 60s
+python run_fuzzer.py --target json --time_budget 60 fuzz_tool/corpus
+
+# Simulated crash target (quick demo): add a file containing "CRASH!" to corpus
+echo 'CRASH!' > fuzz_tool/corpus/crash_seed.txt
+python run_fuzzer.py --target edge --time_budget 60 fuzz_tool/corpus
