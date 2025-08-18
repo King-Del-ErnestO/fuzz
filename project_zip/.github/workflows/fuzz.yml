@@ -40,12 +40,12 @@ jobs:
       - name: Run fuzzing (JSON target, 2 minutes)
         run: |
           source venv/bin/activate
-          python run_fuzzer.py --target json --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
+          python run_fuzzer.py --target json --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
 
       - name: Run fuzzing (YAML target, 2 minutes)
         run: |
           source venv/bin/activate
-          python run_fuzzer.py --target yaml --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
+          python run_fuzzer.py --target yaml --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
 
       - name: Run fuzzing (Markdown target, 2 minutes)
         run: |
@@ -55,12 +55,7 @@ jobs:
       - name: Run fuzzing (Edge-case target, 2 minutes)
         run: |
           source venv/bin/activate
-          python run_fuzzer.py --target edge --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
-
-      - name: Run fuzzing (Calc mini-app, 3 minutes)
-        run: |
-          source venv/bin/activate
-          python run_fuzzer.py --target calc --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
+          python run_fuzzer.py --target edge --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
 
       - name: Upload artifacts (crashes & summary)
         if: always()

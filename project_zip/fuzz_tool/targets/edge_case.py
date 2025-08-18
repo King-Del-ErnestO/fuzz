@@ -10,8 +10,8 @@ def process(data: str):
       - Length > 3000 -> BufferError (boundary issue)
       - CSV of ints whose sum == 1337 -> RuntimeError
     """
-    # if data.startswith("CRASH!"):
-    #     return 1 / 0  # ZeroDivisionError
+    if data.startswith("CRASH!"):
+        return 1 / 0  # ZeroDivisionError
 
     if "\x00" in data:
         raise ValueError("NUL byte not allowed")
