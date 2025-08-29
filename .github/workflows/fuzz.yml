@@ -1,3 +1,75 @@
+#name: Run Python Fuzzing Tool
+#
+#on:
+#  push:
+#    branches: [ master ]
+#  pull_request:
+#    branches: [ master ]
+#  schedule:
+#    - cron: "30 1 * * *"  # Nightly at 01:30 UTC
+#
+#jobs:
+#  fuzz:
+#    runs-on: ubuntu-latest
+#    timeout-minutes: 15
+#
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v4
+#
+#      - name: Set up Python 3.10
+#        uses: actions/setup-python@v5
+#        with:
+#          python-version: '3.10'
+#
+#      - name: Cache pip
+#        uses: actions/cache@v4
+#        with:
+#          path: ~/.cache/pip
+#          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+#          restore-keys: |
+#            ${{ runner.os }}-pip-
+#
+#      - name: Install dependencies
+#        run: |
+#          python -m venv venv
+#          source venv/bin/activate
+#          pip install --upgrade pip
+#          pip install -r requirements.txt
+#
+#      - name: Run fuzzing (JSON target, 30 seconds)
+#        run: |
+#          source venv/bin/activate
+#          python run_fuzzer.py --target json --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
+#
+#      - name: Run fuzzing (YAML target, 30 seconds)
+#        run: |
+#          source venv/bin/activate
+#          python run_fuzzer.py --target yaml --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
+#
+#      - name: Run fuzzing (Markdown target, 30 seconds)
+#        run: |
+#          source venv/bin/activate
+#          python run_fuzzer.py --target markdown --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
+#
+#      - name: Run fuzzing (Edge-case target, 30 seconds)
+#        run: |
+#          source venv/bin/activate
+#          python run_fuzzer.py --target edge --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
+#
+#      - name: Run fuzzing (Calc mini-app, 30 seconds)
+#        run: |
+#          source venv/bin/activate
+#          python run_fuzzer.py --target calc --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
+#
+#      - name: Upload artifacts (crashes & summary)
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: fuzzing-reports-${{ github.run_id }}
+#          path: |
+#            reports/**
+
 name: Run Python Fuzzing Tool
 
 on:
@@ -9,12 +81,27 @@ on:
     - cron: "30 1 * * *"  # Nightly at 01:30 UTC
 
 jobs:
-  fuzz:
+  fuzz-readable:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: json
+            time: 30
+          - target: yaml
+            time: 30
+          - target: markdown
+            time: 120
+          - target: edge
+            time: 30
+          - target: calc
+            time: 30
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python 3.10
@@ -37,35 +124,52 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run fuzzing (JSON target, 2 minutes)
+      - name: Run fuzzing (${{ matrix.target }}, ${{ matrix.time }}s, readable)
         run: |
           source venv/bin/activate
-          python run_fuzzer.py --target json --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
+          python run_fuzzer.py \
+            --target ${{ matrix.target }} \
+            --time_budget ${{ matrix.time }} \
+            --artifacts-dir reports/${{ matrix.target }} \
+            --continue_on_crash \
+            fuzz_tool/corpus || true
 
-      - name: Run fuzzing (YAML target, 2 minutes)
-        run: |
-          source venv/bin/activate
-          python run_fuzzer.py --target yaml --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
-
-      - name: Run fuzzing (Markdown target, 2 minutes)
-        run: |
-          source venv/bin/activate
-          python run_fuzzer.py --target markdown --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
-
-      - name: Run fuzzing (Edge-case target, 2 minutes)
-        run: |
-          source venv/bin/activate
-          python run_fuzzer.py --target edge --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
-
-      - name: Run fuzzing (Calc mini-app, 3 minutes)
-        run: |
-          source venv/bin/activate
-          python run_fuzzer.py --target calc --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
-
-      - name: Upload artifacts (crashes & summary)
+      - name: Upload artifacts (${{ matrix.target }})
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fuzzing-reports-${{ github.run_id }}
+          name: fuzzing-reports-${{ matrix.target }}-${{ github.run_id }}
           path: |
-            reports/**
+            reports/${{ matrix.target }}/**
+
+  # Optional: make PRs fail when unexpected crashes occurred
+  fuzz-gate:
+    needs: fuzz-readable
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-reports
+
+      - name: Check for crashes and fail if found
+        run: |
+          python - <<'PY'
+          import json, sys, pathlib
+          crash_total = 0
+          summaries = list(pathlib.Path("all-reports").rglob("run_summary.json"))
+          if not summaries:
+              print("No run_summary.json files found.")
+          for s in summaries:
+              data = json.loads(s.read_text())
+              tgt = data.get("target")
+              unexpected = int(data.get("unexpected_exceptions", 0))
+              print(f"[SUMMARY] target={tgt} unexpected_exceptions={unexpected} file={s}")
+              crash_total += unexpected
+          if crash_total > 0:
+              print(f"::error::Unexpected exceptions found across all targets: {crash_total}")
+              sys.exit(1)
+          print("No unexpected exceptions. Gate passed.")
+          PY

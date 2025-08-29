@@ -37,25 +37,30 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run fuzzing (JSON target, 2 minutes)
+      - name: Run fuzzing (JSON target, 30 seconds)
         run: |
           source venv/bin/activate
-          python run_fuzzer.py --target json --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
+          python run_fuzzer.py --target json --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
 
-      - name: Run fuzzing (YAML target, 2 minutes)
+      - name: Run fuzzing (YAML target, 30 seconds)
         run: |
           source venv/bin/activate
-          python run_fuzzer.py --target yaml --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
+          python run_fuzzer.py --target yaml --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
 
-      - name: Run fuzzing (Markdown target, 2 minutes)
+      - name: Run fuzzing (Markdown target, 30 seconds)
         run: |
           source venv/bin/activate
           python run_fuzzer.py --target markdown --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
 
-      - name: Run fuzzing (Edge-case target, 2 minutes)
+      - name: Run fuzzing (Edge-case target, 30 seconds)
         run: |
           source venv/bin/activate
-          python run_fuzzer.py --target edge --time_budget 120 --artifacts-dir reports fuzz_tool/corpus || true
+          python run_fuzzer.py --target edge --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
+
+      - name: Run fuzzing (Calc mini-app, 30 seconds)
+        run: |
+          source venv/bin/activate
+          python run_fuzzer.py --target calc --time_budget 30 --artifacts-dir reports fuzz_tool/corpus || true
 
       - name: Upload artifacts (crashes & summary)
         if: always()

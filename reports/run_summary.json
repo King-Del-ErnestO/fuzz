@@ -1,13 +1,13 @@
 {
   "artifacts_dir": "reports",
   "crashes": [
-    "reports/crash_5ba93c9db0cff93f52b521d7420e43f6eda2784f"
+    "reports/crash_0c95adf6fd9c7c8a5e03153a4daf3007f64e19f0"
   ],
-  "duration_sec": 0.018,
-  "handled_exceptions": 0,
+  "duration_sec": 0.056,
+  "handled_exceptions": 311,
   "seed": null,
-  "start_time": 1755506978.3469174,
-  "target": "edge",
-  "total_inputs": 5,
+  "start_time": 1756502914.6368127,
+  "target": "calc",
+  "total_inputs": 558,
   "unexpected_exceptions": 1
 }

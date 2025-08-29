@@ -1,0 +1,130 @@
+Mini Calculator Service — One-Page Specification (Target for Fuzzing-in-CI)
+1) Overview
+
+A tiny arithmetic calculator core used as the “software under test” for the MSc project’s fuzzing-in-CI pipeline. It provides a single function, evaluate(expr: str) → int|float, that parses and safely evaluates restricted arithmetic expressions. The target is designed to (a) emulate a real application’s core logic, (b) clearly separate expected input failures from true defects, and (c) generate reproducible artifacts for evaluation.
+
+2) Scope
+
+In scope: expression parsing, validation, and evaluation for basic arithmetic; deterministic error classification; guardrails for safety and performance.
+
+Out of scope: variables, functions, I/O, state, networking, localization, floating-point precision guarantees beyond Python defaults.
+
+3) Interface
+
+Function: evaluate(expr: str) → int|float
+
+Input: UTF-8 string with arithmetic tokens
+
+Output: numeric result (int or float)
+
+Side effects: none (pure function)
+
+4) Supported Grammar (informal)
+Expr   := Term ((‘+’ | ‘−’) Term)*
+Term   := Factor ((‘*’ | ‘/’ | ‘//’ | ‘%’) Factor)*
+Factor := Number | (‘+’|‘−’) Factor | ‘(’ Expr ‘)’
+Number := integer literal (e.g., 0, -12)
+
+
+Operators: + - * / // %
+
+Unary: +x, -x
+
+Parentheses: nested allowed
+
+Whitespace: optional, ignored
+
+5) Business Rules & Safety Limits
+
+Max input length: 256 characters (len(expr) ≤ 256)
+
+Allowed tokens only: digits, whitespace, ()+-*/%
+
+Result bound: abs(result) ≤ 1e9 (guardrail against overflow-like behavior)
+
+No names, attributes, calls, subscripts, or other AST nodes
+
+No side effects (no eval, only Python ast with whitelist)
+
+6) Error Model (Expected vs. Unexpected)
+
+The fuzzing harness classifies exceptions to distinguish valid rejections from true crashes:
+
+Expected Failures (treated as handled, NOT a crash)
+
+SyntaxError — malformed expression (e.g., 1+, (*3))
+
+ValueError — policy violations: empty input, length > 256, non-numeric tokens, non-numeric operands, result magnitude > 1e9
+
+OverflowError — if raised by underlying arithmetic (rare in Python; still “expected”)
+
+Unexpected Failures (treated as crashes → artifacted & minimized)
+
+ZeroDivisionError — indicates uncovered/unsafe arithmetic path (/, //, % by zero)
+
+Any other uncategorized exception — considered a defect (e.g., logic error, unguarded node type)
+
+This separation enables the fuzzer to explore inputs aggressively while only escalating genuine defects to CI artifacts and crash reports.
+
+7) Security & Robustness Considerations
+
+Uses AST parsing with a strict whitelist; no dynamic evaluation.
+
+Enforces length limit and node/type checks to prevent DoS and unsafe constructs.
+
+Avoids heavy or catastrophic-backtracking regex; parser is deterministic.
+
+Pure function, deterministic; no I/O or external calls.
+
+8) CI & Fuzzing Integration
+
+Target key: calc (selected via CLI: --target calc)
+
+Seed corpus: example valid ((1+2)*3-4/2) and boundary cases (e.g., 10/0 to demonstrate crash paths).
+
+Harness behavior:
+
+Runs with a time budget (e.g., 180s in CI).
+
+Records run summary and per-crash artifacts (input bytes + JSON metadata).
+
+Allows libFuzzer minimization by re-raising unexpected exceptions.
+
+9) Telemetry & Artifacts
+
+reports/run_summary.json: target name, duration, total inputs, counts of handled vs unexpected exceptions, list of crash artifact paths, seed used.
+
+reports/crash_<sha1>.input: exact bytes that triggered the crash.
+
+reports/crash_<sha1>.json: exception type/message, traceback, base64 input, input preview, timestamp, seed.
+
+10) Reproducibility
+
+Pinned Python: 3.10 (Atheris-compatible).
+
+Deterministic seed (optional): --seed N for repeatable runs.
+
+One-command run: python run_fuzzer.py --target calc --time_budget 60 fuzz_tool/corpus
+
+CI artifacts ensure post-hoc analysis and reproduction of minimized crashes.
+
+11) Assumptions & Limitations
+
+Arithmetic is limited to integers and the defined operators; floats only arise from /.
+
+Large numeric strings are accepted until result bound is enforced.
+
+Not a general mathematical parser; deliberately minimal to showcase fuzzing signals.
+
+12) Extension Ideas (Future Work)
+
+Add configurable policies (length, bounds, operators).
+
+Track coverage proxies (e.g., line counts) for evaluation charts.
+
+Add differential testing vs. an alternative evaluator to detect semantic mismatches.
+
+Introduce timeouts per evaluation to guard against pathological inputs (not observed with the current AST design).
+
+Summary:
+This mini calculator provides a realistic, well-scoped application core with a crisp contract and a clear error taxonomy. The fuzzing harness treats policy violations as expected, and escalates genuine defects (e.g., divide-by-zero) as unexpected crashes, producing reproducible artifacts suitable for your MSc evaluation and report.
