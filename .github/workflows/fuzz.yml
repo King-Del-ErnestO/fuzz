@@ -127,6 +127,7 @@ jobs:
       - name: Run fuzzing (${{ matrix.target }}, ${{ matrix.time }}s, readable)
         run: |
           source venv/bin/activate
+          mkdir -p reports/${{ matrix.target }}
           python run_fuzzer.py \
             --target ${{ matrix.target }} \
             --time_budget ${{ matrix.time }} \
