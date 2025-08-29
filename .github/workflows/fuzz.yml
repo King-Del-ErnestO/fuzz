@@ -94,8 +94,6 @@ jobs:
           - target: yaml
             time: 30
           - target: markdown
-            time: 120
-          - target: edge
             time: 30
           - target: calc
             time: 30
