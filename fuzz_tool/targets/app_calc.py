@@ -1,15 +1,12 @@
 """
-A tiny calculator "service" to mimic a real application core being fuzz-tested.
+Mini calculator "service" — traceable steps with error propagation.
 
-Spec (business rules):
-- Accepts expressions with integers, + - * / // % and unary +/- and parentheses.
-- Only numbers and operators allowed; no names, calls, attrs, etc.
-- Max input length: 256 chars; empty not allowed.
-- Result magnitude must be <= 1e9, else ValueError (expected failure).
-- Syntax errors and general validation errors -> ValueError or SyntaxError (expected failures).
-- Division by zero -> ZeroDivisionError -> treated as an *unexpected* crash by the harness.
+Public API:
+- evaluate(expr: str) -> number
+- evaluate_with_trace(expr: str) -> (number, [steps...])
 
-Note: Using Python's AST to avoid eval() and restrict nodes.
+On ANY exception, we attach `e._trace_steps = steps` so the fuzzer can print
+the attempted operations instead of "(no steps recorded)".
 """
 
 import ast
@@ -20,71 +17,98 @@ MAX_ABS_RESULT = 10**9
 _ALLOWED_BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod)
 _ALLOWED_UNARY = (ast.UAdd, ast.USub)
 
-def _eval(node):
-    if isinstance(node, ast.Expression):
-        return _eval(node.body)
 
-    # Numbers (allow ints; floats only as the result of '/')
+class _Recorder:
+    def __init__(self):
+        self.steps = []
+    def log(self, msg: str):
+        self.steps.append(msg)
+
+
+def _eval(node, rec: _Recorder):
+    if isinstance(node, ast.Expression):
+        return _eval(node.body, rec)
+
     if isinstance(node, ast.Constant):
-        if isinstance(node.value, (int, float)):  # int literals in py>=3.8 appear as Constant
+        if isinstance(node.value, (int, float)):
+            rec.log(f"CONST {node.value!r}")
             return node.value
         raise ValueError("Only numeric constants allowed")
 
-    # (a op b)
     if isinstance(node, ast.BinOp) and isinstance(node.op, _ALLOWED_BINOPS):
-        left = _eval(node.left)
-        right = _eval(node.right)
+        left = _eval(node.left, rec)
+        right = _eval(node.right, rec)
 
-        # Enforce numeric only
         if not isinstance(left, (int, float)) or not isinstance(right, (int, float)):
             raise ValueError("Operands must be numeric")
 
         if isinstance(node.op, ast.Add):
-            return left + right
+            res = left + right; rec.log(f"ADD  {left} + {right} = {res}"); return res
         if isinstance(node.op, ast.Sub):
-            return left - right
+            res = left - right; rec.log(f"SUB  {left} - {right} = {res}"); return res
         if isinstance(node.op, ast.Mult):
-            return left * right
+            res = left * right; rec.log(f"MUL  {left} * {right} = {res}"); return res
         if isinstance(node.op, ast.Div):
-            # may raise ZeroDivisionError -> we WANT that to be unexpected
-            return left / right
+            res = left / right; rec.log(f"DIV  {left} / {right} = {res}"); return res
         if isinstance(node.op, ast.FloorDiv):
-            return left // right  # ZeroDivisionError possible (unexpected)
+            res = left // right; rec.log(f"FDIV {left} // {right} = {res}"); return res
         if isinstance(node.op, ast.Mod):
-            return left % right   # ZeroDivisionError possible (unexpected)
+            res = left % right; rec.log(f"MOD  {left} % {right} = {res}"); return res
 
-    # unary +/- a
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, _ALLOWED_UNARY):
-        val = _eval(node.operand)
+        val = _eval(node.operand, rec)
         if not isinstance(val, (int, float)):
             raise ValueError("Operand must be numeric")
         if isinstance(node.op, ast.UAdd):
-            return +val
+            res = +val; rec.log(f"UADD +{val} = {res}"); return res
         if isinstance(node.op, ast.USub):
-            return -val
+            res = -val; rec.log(f"USUB -({val}) = {res}"); return res
 
-    # Parentheses are handled by AST structure automatically
     raise ValueError(f"Unsupported expression element: {type(node).__name__}")
 
-def evaluate(expr: str):
+
+def _raise_with_trace(exc: Exception, rec: _Recorder):
+    try:
+        setattr(exc, "_trace_steps", list(rec.steps))
+    except Exception:
+        pass
+    raise exc
+
+
+def evaluate_with_trace(expr: str):
+    """Return (result, steps). On exception, attach `_trace_steps` and re-raise."""
     if not isinstance(expr, str):
         raise ValueError("Expression must be a string")
     expr = expr.strip()
+    rec = _Recorder()
+
     if not expr:
-        raise ValueError("Empty expression")
+        rec.log("ERROR Empty expression")
+        return _raise_with_trace(ValueError("Empty expression"), rec)
+
     if len(expr) > MAX_LEN:
-        raise ValueError("Expression too long")
+        rec.log(f"ERROR Expression too long: {len(expr)} > {MAX_LEN}")
+        return _raise_with_trace(ValueError("Expression too long"), rec)
 
     try:
         tree = ast.parse(expr, mode="eval")
     except SyntaxError as se:
-        # expected failure for bad syntax
-        raise se
+        rec.log("ERROR SyntaxError while parsing")
+        return _raise_with_trace(se, rec)
 
-    result = _eval(tree)
+    try:
+        result = _eval(tree, rec)
+    except Exception as e:
+        return _raise_with_trace(e, rec)
 
-    # Enforce magnitude rule (expected failure)
     if isinstance(result, (int, float)) and abs(result) > MAX_ABS_RESULT:
-        raise ValueError("Result out of allowed bounds")
+        rec.log(f"ERROR Result out of bounds: {result}")
+        return _raise_with_trace(ValueError("Result out of allowed bounds"), rec)
 
-    return result
+    rec.log(f"RESULT = {result}")
+    return result, rec.steps
+
+
+def evaluate(expr: str):
+    """Compatibility wrapper used by non-tracing paths."""
+    return evaluate_with_trace(expr)[0]

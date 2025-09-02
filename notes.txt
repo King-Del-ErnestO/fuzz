@@ -17,3 +17,16 @@ python run_fuzzer.py --target edge --time_budget 60 fuzz_tool/corpus
 
 
 python run_fuzzer.py --target calc --time_budget 60 fuzz_tool/corpus
+
+# Example: see 5 traced calculator evaluations, including expected failures
+python run_fuzzer.py --target calc --time_budget 20 \
+  --trace_calc 5 --trace_errors --continue_on_crash fuzz_tool/corpus
+
+
+find . -maxdepth 1 -type f ! -name "*.txt" -exec rm -f {} +
+
+
+python run_fuzzer.py --target calc --time_budget 20 \
+  --trace_calc 8 --trace_errors --demo_ops --continue_on_crash \
+  --summary_interval 3 \
+  fuzz_tool/corpus
